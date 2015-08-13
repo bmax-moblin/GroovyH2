@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">GroovyH2</string>
+    <string name="app_label">Groovy H2 Demo</string>
+    <string name="action_write">Write</string>
+    <string name="action_read">Read</string>
+    <string name="action_delete">Delete</string>
+    <string name="app_prompt">Select an action from the menu</string>
+</resources>
