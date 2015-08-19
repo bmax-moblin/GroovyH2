@@ -2,6 +2,7 @@ package com.moblin.groovyh2;
 
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
@@ -15,7 +16,9 @@ public class StartActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_start);
         textOut = (TextView) findViewById(R.id.text_out);
-        dbHelper = new DatabaseHelper();
+        textOut.setMovementMethod(new ScrollingMovementMethod());
+        String dbName = getFilesDir() + "/test.db";
+        dbHelper = new DatabaseHelper(dbName);
     }
 
     @Override

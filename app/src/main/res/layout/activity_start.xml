@@ -10,6 +10,9 @@
         android:id="@+id/text_out"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:text="@string/app_prompt"/>
+        android:text="@string/app_prompt"
+        android:textAppearance="@android:style/TextAppearance.Holo.Medium"
+        android:maxLines="100"
+        android:scrollbars="vertical"/>
 
 </RelativeLayout>

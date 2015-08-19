@@ -2,14 +2,14 @@ package com.moblin.groovyh2
 
 import groovy.sql.Sql
 import groovy.transform.CompileStatic
-import groovy.transform.TypeCheckingMode;
+import groovy.transform.TypeCheckingMode
 
 @CompileStatic(TypeCheckingMode.SKIP)
 public class DatabaseHelper {
     Sql sql;
 
-    DatabaseHelper() {
-        def url = 'jdbc:h2:/data/data/com.moblin.groovyh2/data/test.db;FILE_LOCK=FS;PAGE_SIZE=1024;CACHE_SIZE=8192'
+    DatabaseHelper(String dbNameWithPath) {
+        def url = "jdbc:h2:${dbNameWithPath};FILE_LOCK=FS;PAGE_SIZE=1024;CACHE_SIZE=8192"
         def user = ''
         def password = ''
         def driver = 'org.h2.Driver'
@@ -18,24 +18,31 @@ public class DatabaseHelper {
     }
 
     /**
-     * Deletes the lonely database table
-     */
-    void destroyDatabase() {
-        sql.execute '''
-            drop table if exists product
-        '''
-    }
-
-    /**
-     * Creates the lonely database table
+     * Creates the database tables
      */
     void createDatabase() {
         sql.execute '''
-            create table if not exists product (
-                id identity primary key,
-                name varchar(25),
-                price double
-            )
+            CREATE TABLE IF NOT EXISTS products (
+                id IDENTITY PRIMARY KEY,
+                name VARCHAR(50),
+                price DECIMAL(20, 2)
+            );
+            CREATE TABLE IF NOT EXISTS order_lines (
+                id IDENTITY PRIMARY KEY,
+                product_id BIGINT,
+                order_id BIGINT,
+                quantity INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS orders (
+                id IDENTITY PRIMARY KEY,
+                num VARCHAR(50),
+                date_created DATE,
+                customer_id BIGINT
+            );
+            CREATE TABLE IF NOT EXISTS customers (
+                id IDENTITY PRIMARY KEY,
+                name VARCHAR(50),
+            );
         '''
     }
 
@@ -43,10 +50,16 @@ public class DatabaseHelper {
      * Writes records to the database and returns a message
      */
     String write() {
-        sql.execute """
-            insert into product (name, price) values
-                ('baseball',4.99),('football',14.95),('basketball',14.99)
-        """
+        new DataProvider().initSampleData().each { customer ->
+            long customerKey = insertCustomer(customer)
+            customer.orders.each { order ->
+                long orderKey = insertOrder(order, customerKey)
+                order.orderLines.each { line ->
+                    long productKey = insertProduct(line.product)
+                    insertOrderLine(line, orderKey, productKey)
+                }
+            }
+        }
         "Records written to the database"
     }
 
@@ -54,49 +67,116 @@ public class DatabaseHelper {
      * Reads and returns all of the records in the database
      */
     String read() {
-        getAllProducts().toString()
+        getAllCustomers().collect({ customer ->
+            def orders = customer.orders.collect { order ->
+                def orderLines = order.orderLines.collect { line ->
+                    "        ${line.product.name} x ${line.quantity} = ${line.price}"
+                }.join('\n')
+                "    number=${order.number}, date=${order.dateCreated}, lines:\n${orderLines}"
+            }.join('\n')
+            "customer=${customer.name}, orders:\n${orders}"
+        }).join('\n')  ?: 'There are no records'
     }
 
     /**
-     * Deletes products from the database one by one
+     * Removes all of the records from the database
      */
     String delete() {
-        sql.execute 'delete from product'
+        sql.execute '''
+            DELETE FROM products;
+            DELETE FROM orders;
+            DELETE FROM customers;
+            DELETE FROM order_lines;
+        '''
         "Records deleted"
     }
 
     /**
-     * Returns the list of the stored objects
+     * Returns the list of the stored customers
      */
-    List<Product> getAllProducts() {
-        sql.rows('select * from product').collect { row ->
-            new Product(
-                    row.collectEntries { k,v -> [k.toLowerCase(), v] }
+    List<Customer> getAllCustomers() {
+        sql.rows('SELECT * FROM customers').collect {
+            def row = it.collectEntries { k,v -> [k.toLowerCase(), v] }
+            new Customer(
+                    name: row.name,
+                    orders: findOrders(row.id)
             )
         }
     }
 
     /**
-     * Returns the stored object corresponding to the provided id
+     * Returns the list of orders for a customer with the provided ID
      */
-    Product findProductById(int id) {
-        def row = sql.firstRow('select * from product where id=?', id)
+    List<Order> findOrders(long customerId) {
+        sql.rows("SELECT * FROM orders WHERE customer_id=${customerId}").collect {
+            def row = it.collectEntries { k,v -> [k.toLowerCase(), v] }
+            new Order(
+                    number: row.num,
+                    dateCreated: row.date_created,
+                    orderLines: findOrderLines(row.id)
+            )
+        }
+    }
+
+    /**
+     * Returns a list of order lines for an order with the provided ID
+     */
+    List<OrderLine> findOrderLines(long orderId) {
+        sql.rows("SELECT * FROM order_lines WHERE order_id=${orderId}").collect {
+            def row = it.collectEntries { k,v -> [k.toLowerCase(), v] }
+            new OrderLine(
+                    product: findProduct(row.product_id),
+                    quantity: row.quantity
+            )
+        }
+    }
+
+    /**
+     * Returns the stored product corresponding to the provided ID
+     */
+    Product findProduct(long id) {
+        def row = sql.firstRow('SELECT name, price FROM products WHERE id=?', id)
         return new Product( row.collectEntries { k,v -> [k.toLowerCase(), v] } );
     }
 
     /**
-     * Maps an object to a database row and inserts it
+     * Maps a product to a database row and inserts it
      */
-    void insertProduct(Product p) {
-        def params = [p.id, p.name, p.price]
-        sql.execute 'insert into product(id,name,price) values(?,?,?)', params
+    long insertProduct(Product p) {
+        String insertSql = 'INSERT INTO products (name, price) values (?, ?)'
+        List params = [p.name, p.price]
+        def productKeys = sql.executeInsert insertSql, params
+        (long)productKeys[0][0]
     }
 
     /**
-     * Deletes the stored object from the database
+     * Maps an order to a database row and inserts it
      */
-    void deleteProduct(int id) {
-        sql.execute 'delete from product where id=?', id
+    long insertOrder(Order o, customerKey) {
+        String insertSql = 'INSERT INTO orders (num, date_created, customer_id) VALUES (?, ?, ?)'
+        List params = [o.number, o.dateCreated, customerKey]
+        def orderKeys = sql.executeInsert insertSql, params
+        (long)orderKeys[0][0]
+    }
+
+    /**
+     * Maps a customer to a database row and inserts it
+     */
+    long insertCustomer(Customer c) {
+        String insertSql = 'INSERT INTO customers (name) VALUES (?)'
+        List params = [c.name]
+        def customerKeys = sql.executeInsert insertSql, params
+        (long)customerKeys[0][0]
+    }
+
+    /**
+     * Maps an order line to a database row and inserts it
+     */
+    long insertOrderLine(OrderLine l, long orderKey, long productKey) {
+        String insertSql = 'INSERT INTO order_lines (order_id, product_id, quantity) VALUES (?, ?, ?)'
+        List params = [orderKey, productKey, l.quantity]
+        def lineKeys = sql.executeInsert insertSql, params
+        (long)lineKeys[0][0]
     }
 
 }

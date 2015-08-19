@@ -5,8 +5,9 @@ import groovy.transform.EqualsAndHashCode
 
 @CompileStatic
 @EqualsAndHashCode
-public class Product {
-    String name
-    BigDecimal price
-    String toString() {"Product: $name ($price)"}
+public class Order {
+    String number
+    Date dateCreated
+    List<OrderLine> orderLines
+    String toSting() {"Order: $number"}
 }
