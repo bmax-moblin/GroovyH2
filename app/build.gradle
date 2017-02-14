@@ -19,6 +19,11 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
+    packagingOptions {
+        exclude 'META-INF/groovy-release-info.properties'
+        exclude 'META-INF/LICENSE'
+    }
 }
 
 dependencies {
