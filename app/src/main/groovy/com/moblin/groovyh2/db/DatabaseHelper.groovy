@@ -1,4 +1,4 @@
-package com.moblin.groovyh2
+package com.moblin.groovyh2.db
 
 import groovy.sql.Sql
 import groovy.transform.CompileStatic
